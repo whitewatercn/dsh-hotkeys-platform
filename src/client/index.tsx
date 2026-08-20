@@ -26,13 +26,19 @@ export function apply(ctx: Context): void {
     // 2. 设置页分区。
     const slots = ctx.get('slots') as
       | { inject(key: string, callback: () => () => void): () => void
-          register(options: Record<string, unknown>, render: (props: unknown) => unknown): () => void }
+          register(options: Record<string, unknown>, component: (props: Record<string, unknown>) => unknown): () => void }
       | undefined
     if (slots && typeof slots.inject === 'function') {
       disposeSlot = slots.inject('settings.section', () =>
         slots.register(
-          { name: 'settings.section', id: 'hotkeys', label: '快捷键', order: 150 },
-          () => <HotkeysSettingsPanel service={service} />,
+          {
+            name: 'settings.section',
+            id: 'hotkeys',
+            order: 150,
+            label: () => '快捷键',
+            inject: () => ({ service }),
+          },
+          HotkeysSettingsPanel as (props: Record<string, unknown>) => unknown,
         ),
       )
     }

@@ -44,6 +44,103 @@ export function apply(ctx: Context): void {
 
 ---
 
+## 实战教程：给插件注册快捷键（以 `dsh-better-archive` 为例）
+
+下面用一个真实插件 [`dsh-better-archive`](https://github.com/huahai0202/dsh-better-archive)（在 DSH 设置区提供「已归档」会话管理页）做例子，逐步演示如何让它的功能接入快捷键平台。
+
+### 目标
+
+给 `dsh-better-archive` 增加一个全局快捷键 **`Control+Shift+A` → 打开「已归档」设置页**。用户可以在「设置 → 快捷键」里把它改绑成别的键，或整体禁用。
+
+### 第 1 步：声明对平台的可选依赖
+
+在 `dsh-better-archive/package.json` 里把平台加为 **peerDependency（可选）**，这样平台未安装时插件照常加载，注册代码因 `ctx.hotkeys` 为 undefined 而跳过：
+
+```jsonc
+{
+  "peerDependencies": {
+    "dsh-hotkeys-platform": "^0.1.0",
+    "cordis": "^4.0.0-rc.8"
+  },
+  "peerDependenciesMeta": {
+    "dsh-hotkeys-platform": { "optional": true }
+  }
+}
+```
+
+### 第 2 步：在 client half 里 `inject` 平台服务
+
+```ts
+export const inject = ['slots', 'sessions', 'hotkeys']  // 追加 'hotkeys'
+```
+
+> `inject` 里声明 `hotkeys` 后，Cordis 会**等平台发布 `ctx.hotkeys` 服务后才激活你的插件**；平台未安装时该服务永不出现，你的插件保持未激活（无 UI、无行为）。
+
+### 第 3 步：注册动作
+
+在你的 client `apply(ctx)` 里注册动作，**务必包在 `ctx.effect(...)`**（HMR/禁用时自动撤销）：
+
+```ts
+export function apply(ctx: Context): void {
+  // ...你原有的 slots.inject('settings.section', ...) 注册归档页面...
+
+  ctx.effect(() => {
+    const hotkeys = ctx.get('hotkeys')   // 可选服务：未安装时 undefined
+    if (!hotkeys) return
+
+    hotkeys.registerAction({
+      id: 'dsh-better-archive:open-archived',
+      title: () => t('打开已归档'),          // i18n 友好
+      description: '打开「已归档」设置页',
+      group: '归档',
+      scope: 'global',                       // 任意处触发
+      defaultKey: 'Control+Shift+A',         // 默认键；用户可改绑
+      handler: (event, h) => {
+        // 打开 DSH 设置并导航到 better-archive 的「已归档」分区。
+        // 具体打开方式取决于 DSH settings 服务是否暴露 openSection；
+        // 接入时用 Inspect 查证该服务名后替换下面的占位调用。
+        openSettings('better-archive')
+      },
+    })
+  })
+}
+```
+
+### 关键点说明
+
+| 点 | 说明 |
+|---|---|
+| **`ctx.get('hotkeys')` + 判空** | 平台是可选项，读不到就跳过；不要用 `inject` 之外的 `ctx.hotkeys` 直接访问 |
+| **`ctx.effect` 包裹** | `registerAction` 返回 disposer，fiber 卸载（HMR/禁用）时自动撤销注册，否则下次激活抛 `already registered` |
+| **`id` 用包前缀** | `dsh-better-archive:open-archived`，避免与别的插件冲突 |
+| **`scope: 'global'`** | 任意处可触发；若动作只在输入框有意义，改 `scope: 'input'`；提问卡内用 `question-card`；精确判定用 `custom` + `target(el)` |
+| **`handler` 返回 `false`** | 表示「不消费这次按键，放行给 DSH 原生/后续动作」——例如你想让某键只在特定条件下生效，条件不满足时 `return false` |
+
+### 需要 host 能力的动作
+
+如果某个快捷键动作要触发 **host 侧能力**（读写文件、执行命令、归档会话等），平台**不承载**这些逻辑——由你的插件自带 host 路由，handler 里 `fetch` 即可。例如 better-archive 的「清空全部归档」动作可以这样写：
+
+```ts
+handler: async () => {
+  await fetch('/archived/delete-all', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  })
+}
+```
+
+> 这正是平台「host 仅可选扩展」的设计：host 半只留一个可选的 `hotkeys` 设置命名空间，业务 host 能力一律由各插件自己的 `/路由` 提供。
+
+### 验证
+
+1. 重启 `dsh web`（peer 依赖新增需重启），浏览器强刷；
+2. 打开「设置 → 快捷键」，应看到「归档」分组下出现「打开已归档」动作，当前键显示 `Ctrl+Shift+A`；
+3. 在任意界面按下 `Ctrl+Shift+A`，应跳转到「已归档」设置页；
+4. 点「录制」把键改成别的组合键，或点「禁用」整体关闭。
+
+---
+
 ## 动作描述符
 
 | 字段 | 说明 |
@@ -108,6 +205,52 @@ dsh plugin --profile web add link:<本仓库路径>
 ```
 
 重启 `dsh web`（host 改动需重启；client 改动浏览器强刷）。
+
+---
+
+## 如何配置快捷键（用户教程）
+
+### 入口一：设置页（推荐）
+
+1. 打开 DSH 设置（左下角齿轮图标）。
+2. 左侧导航选择「**快捷键**」分区。
+3. 页面按**分组**列出所有插件注册的动作，每个动作显示标题、描述、动作 id 与当前生效键。
+4. 配置操作：
+   - **录制**：点动作右侧「录制」→ 页面提示「请按下新的组合键」→ 按下你想用的组合键（如 `Ctrl+Shift+K`）即完成。按 `Esc` 取消；15 秒无操作自动取消。
+   - **禁用**：点「禁用」，该动作完全关闭（连默认键也不再触发）。
+   - 已改过的动作会出现「禁用」按钮；未改过的动作使用默认键。
+
+### 入口二：`/hotkeys` 命令
+
+1. 在消息输入框输入 `/hotkeys`。
+2. 弹出菜单列出所有动作及当前键。
+3. 选「🎙 录制「xxx」键」→ 按下组合键。
+
+### 组合键语法
+
+- 格式：修饰键 + 主键，用 `+` 连接，如 `Control+Shift+Enter`。
+- 修饰键别名（任选一种写法）：
+
+| 修饰键 | 别名 |
+|---|---|
+| Ctrl | `Ctrl` / `Control` / `⌃` |
+| Meta | `Meta` / `Cmd` / `Command` / `Win` / `⌘` |
+| Shift | `Shift` / `⇧` |
+| Alt | `Alt` / `Option` / `⌥` |
+
+- 单字符主键自动大写；空格键写作 `Space`。
+
+### 键位三态
+
+| 状态 | 含义 |
+|---|---|
+| 未改过 | 使用动作声明的默认键（`defaultKey`） |
+| 已录制 | 使用你设置的键 |
+| 已禁用 | 完全不触发 |
+
+### 冲突说明
+
+当多个动作绑定了**同一个组合键**，先注册的动作优先触发；冲突的动作在设置页会**红色高亮**，请改绑其中一个避免歧义。
 
 ---
 

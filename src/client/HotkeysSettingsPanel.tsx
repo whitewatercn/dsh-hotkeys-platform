@@ -37,7 +37,7 @@ function actionTitle(action: HotkeyActionDescriptor): string {
   return typeof action.title === 'function' ? action.title() : action.title
 }
 
-export function HotkeysSettingsPanel(props: { service: HotkeyService }): JSX.Element {
+export function HotkeysSettingsPanel(props: { service: HotkeyService } & Record<string, unknown>): JSX.Element {
   const { service } = props
   const actions = useHotkeys(service)
   const conflicts = computeConflicts(service)

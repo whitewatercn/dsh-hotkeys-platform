@@ -1,0 +1,17 @@
+# dsh-hotkeys-platform bundle patch
+#
+# `dsh.bundle.patch` layer of the published package: when installed through
+# the official CLI —
+#
+#   dsh plugin --profile <name> add dsh-hotkeys-platform
+#
+# — the command appends this single `insert` (one plugin row) to the bundle
+# stack, exactly like a manual cordis.patch.yml mount line. No profile edits.
+#
+# The platform is a pure registry: it provides ctx.hotkeys (client half) plus
+# an optional hotkeys settings namespace (host half). Business actions
+# (send/newline/customAnswerSubmit) are registered by consumer plugins such
+# as dsh-hotkeys — the platform itself ships no business actions.
+- insert:
+    - id: hotkeys-platform
+      name: 'dsh-hotkeys-platform'

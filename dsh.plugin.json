@@ -1,0 +1,16 @@
+{
+  "id": "dsh-external/dsh-hotkeys-platform",
+  "version": "0.1.0",
+  "main": "./lib/index.js",
+  "description": "快捷键设定平台：ctx.hotkeys 注册表服务，插件注册动作、统一配置快捷键、全局 keydown 分发",
+  "engines": {
+    "dsh": ">=0.0.1"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  },
+  "client": {
+    "main": "./lib/client-registry.js"
+  }
+}

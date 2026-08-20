@@ -1,11 +1,12 @@
 /**
  * 快捷键设置页（settings.section 的 content）。
- * 注册表驱动：列出所有动作（分组 → order），显示生效键，录制/禁用，
+ * 注册表驱动：列出所有动作（分组 → order），显示生效键，可视化编辑 / 录制 / 禁用，
  * 冲突高亮。用 useSyncExternalStore 订阅服务变化。
  */
 
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import type { HotkeyService, HotkeyActionDescriptor } from '../context-types'
+import { parseCombo, formatCombo, type Combo } from '../combo'
 import classes from './hotkeys-settings.module.css'
 
 function useHotkeys(service: HotkeyService) {
@@ -37,10 +38,115 @@ function actionTitle(action: HotkeyActionDescriptor): string {
   return typeof action.title === 'function' ? action.title() : action.title
 }
 
+/** 常用主键候选（下拉）；用户可自由输入其它键。 */
+const KEY_CANDIDATES = [
+  'Enter', 'Space', 'Tab', 'Escape', 'Backspace', 'Delete',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Home', 'End', 'PageUp', 'PageDown',
+  'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+]
+
+const MODIFIERS: { id: keyof Pick<Combo, 'ctrl' | 'meta' | 'shift' | 'alt'>; label: string }[] = [
+  { id: 'ctrl', label: 'Ctrl' },
+  { id: 'meta', label: '⌘ / Win' },
+  { id: 'alt', label: 'Alt / ⌥' },
+  { id: 'shift', label: 'Shift' },
+]
+
+interface ComboEditorProps {
+  service: HotkeyService
+  action: HotkeyActionDescriptor
+  onClose: () => void
+}
+
+/**
+ * 可视化组合键编辑器：勾选修饰键 + 主键下拉/自由输入 + 实时预览。
+ * 保存 → setBinding；清除 → clearBinding（回落默认）；禁用由行内「禁用」按钮负责。
+ */
+function ComboEditor({ service, action, onClose }: ComboEditorProps): JSX.Element {
+  const current = service.effectiveKey(action.id)
+  const initial = parseCombo(current ?? '')
+  const [combo, setCombo] = useState<Combo>(initial)
+  const [freeKey, setFreeKey] = useState(initial.key)
+
+  const toggleMod = (id: 'ctrl' | 'meta' | 'shift' | 'alt') => {
+    setCombo((c) => ({ ...c, [id]: !c[id] }))
+  }
+
+  const setKey = (key: string) => {
+    setCombo((c) => ({ ...c, key }))
+  }
+
+  const preview = formatCombo(combo)
+  const valid = combo.key.length > 0
+
+  const save = () => {
+    if (!valid) return
+    service.setBinding(action.id, preview)
+    onClose()
+  }
+
+  const clear = () => {
+    service.clearBinding(action.id)  // 回落 defaultKey（区别于禁用）
+    onClose()
+  }
+
+  return (
+    <div className={classes.editor}>
+      <div className={classes.editorRow}>
+        <span className={classes.editorLabel}>修饰键</span>
+        <div className={classes.modGroup}>
+          {MODIFIERS.map((m) => (
+            <label key={m.id} className={classes.modChip}>
+              <input
+                type="checkbox"
+                checked={combo[m.id]}
+                onChange={() => toggleMod(m.id)}
+              />
+              {m.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className={classes.editorRow}>
+        <span className={classes.editorLabel}>主键</span>
+        <select
+          className={classes.keySelect}
+          value={KEY_CANDIDATES.includes(combo.key) ? combo.key : ''}
+          onChange={(e) => { if (e.target.value) setKey(e.target.value) }}
+        >
+          <option value="">自定义…</option>
+          {KEY_CANDIDATES.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+        <input
+          className={classes.keyInput}
+          type="text"
+          placeholder="如 Enter / K / F9"
+          value={freeKey}
+          onChange={(e) => { setFreeKey(e.target.value); setKey(e.target.value) }}
+        />
+      </div>
+
+      <div className={classes.editorRow}>
+        <span className={classes.editorLabel}>预览</span>
+        <span className={classes.preview}>{valid ? preview : '（未选择主键）'}</span>
+      </div>
+
+      <div className={classes.editorActions}>
+        <button className={classes.btn} disabled={!valid} onClick={save}>保存</button>
+        <button className={`${classes.btn} ${classes.btnGhost}`} onClick={clear}>清除（回默认）</button>
+        <button className={`${classes.btn} ${classes.btnGhost}`} onClick={onClose}>取消</button>
+      </div>
+    </div>
+  )
+}
+
 export function HotkeysSettingsPanel(props: { service: HotkeyService } & Record<string, unknown>): JSX.Element {
   const { service } = props
   const actions = useHotkeys(service)
   const conflicts = computeConflicts(service)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const groups = new Map<string, HotkeyActionDescriptor[]>()
   for (const a of actions) {
@@ -54,7 +160,7 @@ export function HotkeysSettingsPanel(props: { service: HotkeyService } & Record<
   return (
     <div className={classes.panel}>
       <div className={classes.hint}>
-        快捷键平台：插件注册的每个动作都可在此配置。录制后按键即生效；同一组合键被多个动作使用时，先注册者优先（冲突已高亮）。
+        快捷键平台：插件注册的每个动作都可在此配置。可用「编辑」点选组合键，或「录制」直接按键；同一组合键被多个动作使用时，先注册者优先（冲突已高亮）。
       </div>
 
       {actions.length === 0 && (
@@ -69,29 +175,42 @@ export function HotkeysSettingsPanel(props: { service: HotkeyService } & Record<
             const userBound = service.getBindings()[action.id] !== undefined
             const disabled = key === null && userBound
             const isConflict = key !== null && conflicts.has(key)
+            const isEditing = editingId === action.id
             return (
-              <div key={action.id} className={isConflict ? `${classes.row} ${classes.conflict}` : classes.row}>
-                <div className={classes.rowMain}>
-                  <div className={classes.rowTitle}>{actionTitle(action)}</div>
-                  {action.description && <div className={classes.rowDesc}>{action.description}</div>}
-                  <div className={classes.rowId}>{action.id}</div>
-                </div>
-                <div className={classes.rowActions}>
-                  <span className={classes.key}>
-                    {key ?? (disabled ? '已禁用' : '未绑定')}
-                  </span>
-                  <button className={classes.btn} onClick={() => { void service.record(action.id) }}>
-                    录制
-                  </button>
-                  {userBound && (
-                    <button
-                      className={`${classes.btn} ${classes.btnGhost}`}
-                      onClick={() => service.setBinding(action.id, '')}
-                    >
-                      禁用
+              <div key={action.id} className={classes.item}>
+                <div className={isConflict ? `${classes.row} ${classes.conflict}` : classes.row}>
+                  <div className={classes.rowMain}>
+                    <div className={classes.rowTitle}>{actionTitle(action)}</div>
+                    {action.description && <div className={classes.rowDesc}>{action.description}</div>}
+                    <div className={classes.rowId}>{action.id}</div>
+                  </div>
+                  <div className={classes.rowActions}>
+                    <span className={classes.key}>
+                      {key ?? (disabled ? '已禁用' : '未绑定')}
+                    </span>
+                    <button className={classes.btn} onClick={() => setEditingId(isEditing ? null : action.id)}>
+                      {isEditing ? '收起' : '编辑'}
                     </button>
-                  )}
+                    <button className={classes.btn} onClick={() => { void service.record(action.id) }}>
+                      录制
+                    </button>
+                    {userBound && (
+                      <button
+                        className={`${classes.btn} ${classes.btnGhost}`}
+                        onClick={() => service.setBinding(action.id, '')}
+                      >
+                        禁用
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {isEditing && (
+                  <ComboEditor
+                    service={service}
+                    action={action}
+                    onClose={() => setEditingId(null)}
+                  />
+                )}
               </div>
             )
           })}

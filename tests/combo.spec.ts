@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCombo, describeCombo, matchCombo, isEmptyCombo, isPlainEnter, isEnterFamily } from '../src/combo'
+import { parseCombo, describeCombo, matchCombo, formatCombo, isEmptyCombo, isPlainEnter, isEnterFamily } from '../src/combo'
 
 describe('parseCombo', () => {
   it('解析修饰键 + 主键', () => {
@@ -49,6 +49,19 @@ describe('matchCombo', () => {
   })
   it('空组合键永不命中', () => {
     expect(matchCombo(event, parseCombo(''))).toBe(false)
+  })
+})
+
+describe('formatCombo', () => {
+  it('Combo → 字符串（修饰键固定顺序）', () => {
+    expect(formatCombo({ key: 'Enter', ctrl: true, meta: false, shift: true, alt: false })).toBe('Ctrl+Shift+Enter')
+  })
+  it('parseCombo 与 formatCombo 往返一致', () => {
+    const s = 'Control+Shift+Enter'
+    expect(formatCombo(parseCombo(s))).toBe('Ctrl+Shift+Enter')
+  })
+  it('空主键 → 空串', () => {
+    expect(formatCombo({ key: '', ctrl: true, meta: false, shift: false, alt: false })).toBe('')
   })
 })
 

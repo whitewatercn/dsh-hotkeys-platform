@@ -179,9 +179,10 @@ interface HotkeyService {
   getBindings(): Readonly<Record<string, string>>   // 只存用户改过的
   effectiveKey(actionId: string): string | null     // 用户绑定 ?? 默认 ?? null（禁用）
   setBinding(actionId: string, combo: string): void // combo='' 表示显式禁用
+  clearBinding(actionId: string): void              // 删除绑定，回落 defaultKey
   record(actionId: string): Promise<string | null>  // 录制
   subscribe(listener: () => void): () => void
-  readonly features: readonly string[]              // 'record' | 'subscribe' | 'effectiveKey'
+  readonly features: readonly string[]              // 'record' | 'subscribe' | 'effectiveKey' | 'clearBinding'
   readonly version: string
 }
 ```
@@ -215,8 +216,13 @@ dsh plugin --profile web add link:<本仓库路径>
 1. 打开 DSH 设置（左下角齿轮图标）。
 2. 左侧导航选择「**快捷键**」分区。
 3. 页面按**分组**列出所有插件注册的动作，每个动作显示标题、描述、动作 id 与当前生效键。
-4. 配置操作：
-   - **录制**：点动作右侧「录制」→ 页面提示「请按下新的组合键」→ 按下你想用的组合键（如 `Ctrl+Shift+K`）即完成。按 `Esc` 取消；15 秒无操作自动取消。
+4. 配置操作（可视化点选 + 键盘录制，两条路写同一份绑定）：
+   - **编辑（可视化）**：点动作右侧「编辑」展开组合键编辑器——
+     - **修饰键**：勾选 `Ctrl` / `⌘/Win` / `Alt/⌥` / `Shift`（多选）；
+     - **主键**：下拉选常用键（Enter、Space、Tab、Esc、方向键、F1-F12…），或直接输入任意键名；
+     - **预览**实时显示拼出的组合键，点「保存」生效，「清除」回到默认键；
+     - 好处：能配「浏览器保留键」（如 `Cmd+W`、`Ctrl+T` 录不到但可手工拼）、能精确微调单个修饰键。
+   - **录制（快捷）**：点「录制」→ 提示「请按下新的组合键」→ 直接按键即完成。`Esc` 取消；15 秒无操作自动取消。
    - **禁用**：点「禁用」，该动作完全关闭（连默认键也不再触发）。
    - 已改过的动作会出现「禁用」按钮；未改过的动作使用默认键。
 

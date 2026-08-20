@@ -49,7 +49,7 @@ export interface HotkeyActionDescriptor {
 }
 
 /** 服务单调能力清单（只增不删）。 */
-export type HotkeyFeature = 'record' | 'subscribe' | 'effectiveKey'
+export type HotkeyFeature = 'record' | 'subscribe' | 'effectiveKey' | 'clearBinding'
 
 export interface HotkeyService {
   /** 注册一个快捷键动作；返回 disposer（HMR-safe，卸载自动撤销）。 */
@@ -64,8 +64,11 @@ export interface HotkeyService {
   /** 一个动作当前生效的键（用户绑定 ?? 默认键 ?? null；显式禁用返回 null）。 */
   effectiveKey(actionId: string): string | null
 
-  /** 设置/清除一个动作的用户绑定；combo='' 表示显式禁用。 */
+  /** 设置一个动作的用户绑定；combo='' 表示显式禁用。 */
   setBinding(actionId: string, combo: string): void
+
+  /** 删除用户绑定记录，回落 defaultKey（与「禁用」区分）。 */
+  clearBinding(actionId: string): void
 
   /** 进入录制态，捕获下一个组合键并返回描述串（Esc/超时返回 null）。 */
   record(actionId: string): Promise<string | null>

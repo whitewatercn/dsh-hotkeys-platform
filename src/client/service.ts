@@ -12,7 +12,7 @@ import { recordCombo } from './record'
 import { isEditableTarget } from '../scope'
 
 export const PLATFORM_VERSION = '0.1.0'
-export const FEATURES = ['record', 'subscribe', 'effectiveKey'] as const
+export const FEATURES = ['record', 'subscribe', 'effectiveKey', 'clearBinding'] as const
 
 export interface ServiceDeps {
   /** localStorage 访问（可注入 fake，便于测试）。 */
@@ -126,6 +126,13 @@ export function createHotkeyService(deps: ServiceDeps): HotkeyService {
 
     setBinding(actionId: string, combo: string): void {
       bindings[actionId] = String(combo ?? '')
+      persist()
+      notify()
+    },
+
+    clearBinding(actionId: string): void {
+      if (!(actionId in bindings)) return
+      delete bindings[actionId]
       persist()
       notify()
     },

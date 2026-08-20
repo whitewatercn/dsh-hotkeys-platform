@@ -68,6 +68,22 @@ export function matchCombo(
   return true
 }
 
+/**
+ * Combo → 组合键字符串（`formatCombo` 的逆）。
+ * 修饰键按 Ctrl/Meta/Alt/Shift 固定顺序，主键在最后。
+ * 主键为空返回 ''（表示无绑定/显式禁用）。
+ */
+export function formatCombo(combo: Combo): string {
+  if (!combo || !combo.key) return ''
+  const parts: string[] = []
+  if (combo.ctrl) parts.push('Ctrl')
+  if (combo.meta) parts.push('Meta')
+  if (combo.alt) parts.push('Alt')
+  if (combo.shift) parts.push('Shift')
+  parts.push(combo.key)
+  return parts.join('+')
+}
+
 /** 组合键是否「无任何绑定」（主键为空）。 */
 export function isEmptyCombo(combo: Combo): boolean {
   return !combo.key
